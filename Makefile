@@ -1,15 +1,21 @@
+# Configuration
+
 BIN_DEBUG := main
 BIN_RELEASE := gm
 BIN_DIR := out
 BUILD_DIR := build
-
+MAKEFLAGS += -j
 DEBUG_FLAGS := -ggdb
 RELEASE_FLAGS := -O3
 CXXFLAGS := -std=c++23
 
+# Inner workings
 MODE := debug
 SOURCES := $(wildcard *.cc)
 OBJECTS := $(patsubst %.cc,$(BUILD_DIR)/$(MODE)/%.o,$(SOURCES))
+
+TOTAL := $(words $(OBJECTS))
+CURRENT = 0
 
 ifeq ($(MODE), debug)
 	CXXFLAGS := $(CXXFLAGS) $(DEBUG_FLAGS)
@@ -21,19 +27,41 @@ ifeq ($(MODE), release)
 	BIN := $(BIN_DIR)/$(BIN_RELEASE)
 endif
 
-build: $(BIN)
+define comp_prog
+    $(eval CURRENT=$(shell echo $$(( $(CURRENT) + 1 ))))
+	@echo "[$(CURRENT)/$(TOTAL)] $(1): $@"
+endef
 
-release:
-	make MODE=release build
+define compiling_log
+	$(call comp_prog,Compiling object)
+endef
+
+define linking_log
+	$(call comp_prog,Linking executable)
+endef
+
+build: calculate_total $(BIN)
+
+release: calculate_total
+	@$(MAKE) --no-print-directory MODE=release TOTAL=$(TOTAL) build
+
+build-dry: $(BIN)
+
+calculate_total:
+	$(eval TOTAL := $(shell \
+		$(MAKE) --no-print-directory -n build-dry | grep '$(CXX)' | wc -l))
 
 $(BIN): $(OBJECTS) | $(BIN_DIR)/
-	$(CXX) $(CXXFLAGS) -o $(BIN) $(OBJECTS)
+	$(call linking_log)
+	@$(CXX) $(CXXFLAGS) -o $(BIN) $(OBJECTS)
 
 $(BUILD_DIR)/$(MODE)/%.o: %.cc %.hh | $(BUILD_DIR)/$(MODE)/
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(call compiling_log)
+	@$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/$(MODE)/%.o: %.cc | $(BUILD_DIR)/$(MODE)/
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	$(call comp_prog,Compiling object)
+	@$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/:
 	@mkdir -p $(BUILD_DIR)
@@ -49,4 +77,4 @@ clean:
 	@if [ -d "$(BIN_DIR)" ] && [ "$(wildcard $(BIN_DIR)*)" ]; then rm -r $(BIN_DIR)*; fi
 	@if [ -d "$(BUILD_DIR)" ] && [ "$(wildcard $(BUILD_DIR)*)" ]; then rm -r $(BUILD_DIR)*; fi
 
-.PHONY: release build clean
+.PHONY: release build clean build-dry calculate_total
