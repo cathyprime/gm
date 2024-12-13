@@ -12,6 +12,7 @@ enum Register : uint8_t {
 };
 
 class CPU {
+    uint64_t registers[8];
   public:
     class Register_Proxy {
         uint64_t &reg_data;

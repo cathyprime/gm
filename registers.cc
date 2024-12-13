@@ -2,8 +2,6 @@
 
 #include "registers.hh"
 
-static uint64_t registers[8];
-
 CPU::Register_Proxy::Register_Proxy(uint64_t &data, uint64_t mask, uint64_t shift)
     : reg_data(data)
     , mask(mask)
