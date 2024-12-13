@@ -20,6 +20,11 @@ void CPU::Register_Proxy::operator=(uint64_t value)
     reg_data = (reg_data & ~(mask << shift)) | ((value & mask) << shift);
 }
 
+void CPU::Register_Proxy::operator=(Register_Proxy &r1)
+{
+    this->reg_data = (uint64_t)r1;
+}
+
 CPU::Register_Proxy CPU::operator[](Register reg)
 {
     if (reg >= RAX && reg <= RDX)
