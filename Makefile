@@ -16,6 +16,7 @@ OBJECTS := $(patsubst %.cc,$(BUILD_DIR)/$(MODE)/%.o,$(SOURCES))
 
 TOTAL := $(words $(OBJECTS))
 CURRENT = 0
+RECURSIVE := 0
 
 ifeq ($(MODE), debug)
 	CXXFLAGS := $(CXXFLAGS) $(DEBUG_FLAGS)
@@ -29,7 +30,7 @@ endif
 
 define comp_prog
     $(eval CURRENT=$(shell echo $$(( $(CURRENT) + 1 ))))
-	@echo "[$(CURRENT)/$(TOTAL)] $(1): $@"
+	$(info [$(CURRENT)/$(TOTAL)] $(1): $@)
 endef
 
 define compiling_log
@@ -40,16 +41,16 @@ define linking_log
 	$(call comp_prog,Linking executable)
 endef
 
+debug: build
+release:
+	@$(MAKE) --no-print-directory MODE=release build
+
 build: calculate_total $(BIN)
-
-release: calculate_total
-	@$(MAKE) --no-print-directory MODE=release TOTAL=$(TOTAL) build
-
-build-dry: $(BIN)
-
+ifeq ($(RECURSIVE), 0)
 calculate_total:
 	$(eval TOTAL := $(shell \
-		$(MAKE) --no-print-directory -n build-dry | grep '$(CXX)' | wc -l))
+		$(MAKE) RECURSIVE=1 -n $(MODE) | grep '$(CXX)' | wc -l))
+endif
 
 $(BIN): $(OBJECTS) | $(BIN_DIR)/
 	$(call linking_log)
@@ -60,7 +61,7 @@ $(BUILD_DIR)/$(MODE)/%.o: %.cc %.hh | $(BUILD_DIR)/$(MODE)/
 	@$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/$(MODE)/%.o: %.cc | $(BUILD_DIR)/$(MODE)/
-	$(call comp_prog,Compiling object)
+	$(call compiling_log)
 	@$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/:
@@ -77,4 +78,4 @@ clean:
 	@if [ -d "$(BIN_DIR)" ] && [ "$(wildcard $(BIN_DIR)*)" ]; then rm -r $(BIN_DIR)*; fi
 	@if [ -d "$(BUILD_DIR)" ] && [ "$(wildcard $(BUILD_DIR)*)" ]; then rm -r $(BUILD_DIR)*; fi
 
-.PHONY: release build clean build-dry calculate_total
+.PHONY: debug release build clean calculate_total
