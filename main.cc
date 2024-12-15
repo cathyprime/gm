@@ -1,28 +1,51 @@
 #include <iostream>
-#include <climits>
-#include <bitset>
 
 #include "registers.hh"
+#include "instructions.hh"
 
 int main()
 {
     CPU cpu = {};
-    cpu[RAX] = 10; // RAX: 10
+    exec(cpu, Instruction {
+        .instruction_code = MOV,
+        .first = RAX,
+        .second = 10
+    });
     std::cout << "RAX -> " << cpu[RAX] << std::endl;
 
-    cpu[RAX] -= 5; // RAX: 5
+    exec(cpu, Instruction {
+        .instruction_code = SUB,
+        .first = RAX,
+        .second = 5
+    });
     std::cout << "RAX -> " << cpu[RAX] << std::endl;
 
-    cpu[RAX] += 7; // RAX: 12
+    exec(cpu, Instruction {
+        .instruction_code = ADD,
+        .first = RAX,
+        .second = 7
+    });
     std::cout << "RAX -> " << cpu[RAX] << std::endl;
 
-    cpu[RAX] *= 2; // RAX: 24
+    exec(cpu, Instruction {
+        .instruction_code = MUL,
+        .first = RAX,
+        .second = 2
+    });
     std::cout << "RAX -> " << cpu[RAX] << std::endl;
 
-    cpu[RBX] = cpu[RAX]; // RBX: 24
+    exec(cpu, Instruction {
+        .instruction_code = MOV,
+        .first = RBX,
+        .second = RAX
+    });
     std::cout << "RBX -> " << cpu[RBX] << std::endl;
 
-    cpu[RAX] += cpu[RBX]; // RAX: 48; RBX: 24
+    exec(cpu, Instruction {
+        .instruction_code = ADD,
+        .first = RAX,
+        .second = RBX
+    });
     std::cout << "RAX -> " << cpu[RAX] << std::endl;
     std::cout << "RBX -> " << cpu[RBX] << std::endl;
 }

@@ -18,6 +18,11 @@ void CPU::Register_Proxy::operator=(uint64_t value)
     reg_data = (reg_data & ~(mask << shift)) | ((value & mask) << shift);
 }
 
+void CPU::Register_Proxy::operator=(Register_Proxy &other)
+{
+    *this = static_cast<uint64_t>(other);
+}
+
 CPU::Register_Proxy CPU::operator[](Register reg)
 {
     if (reg == IP)
@@ -42,6 +47,15 @@ CPU::Register_Proxy CPU::operator[](Register reg)
     std::exit(69);
 }
 
+uint64_t CPU::operator[](Register_Value &rv)
+{
+    if (rv) {
+        return (*this)[rv.as_register];
+    } else {
+        return rv.as_value;
+    }
+}
+
 void CPU::Register_Proxy::operator+=(uint64_t value)
 {
     reg_data = reg_data + static_cast<uint64_t>(value);
@@ -60,4 +74,9 @@ void CPU::Register_Proxy::operator*=(uint64_t value)
 void CPU::Register_Proxy::operator/=(uint64_t value)
 {
     reg_data = reg_data / static_cast<uint64_t>(value);
+}
+
+void CPU::Register_Proxy::operator++(int)
+{
+    reg_data = reg_data + 1;
 }
