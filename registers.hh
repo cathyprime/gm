@@ -8,12 +8,12 @@ enum Register : uint8_t {
     EAX, EBX, ECX, ESP, EBP, EDI, ESI, EDX,
     AX, BX, CX, SP, BP, DI, SI, DX,
     AH, BH, CH, DH = 31,
-    AL, BL, CL, SPL, BPL, DIL, SIL, DL,
+    AL, BL, CL, SPL, BPL, DIL, SIL, DL, IP
 };
 
 class CPU {
     uint64_t registers[8];
-  public:
+    uint64_t instruction;
     class Register_Proxy {
         uint64_t &reg_data;
         uint64_t mask;
@@ -23,8 +23,13 @@ class CPU {
         Register_Proxy(uint64_t &data, uint64_t mask = UINT64_MAX, uint64_t shift = 0);
         operator uint64_t() const;
         void operator=(uint64_t value);
-        void operator=(Register_Proxy &r1);
+        void operator+=(uint64_t value);
+        void operator-=(uint64_t value);
+        void operator*=(uint64_t value);
+        void operator/=(uint64_t value);
+
     };
 
+  public:
     Register_Proxy operator[](Register reg);
 };

@@ -18,13 +18,11 @@ void CPU::Register_Proxy::operator=(uint64_t value)
     reg_data = (reg_data & ~(mask << shift)) | ((value & mask) << shift);
 }
 
-void CPU::Register_Proxy::operator=(Register_Proxy &r1)
-{
-    this->reg_data = (uint64_t)r1;
-}
-
 CPU::Register_Proxy CPU::operator[](Register reg)
 {
+    if (reg == IP)
+        return Register_Proxy(instruction);
+
     if (reg >= RAX && reg <= RDX)
         return Register_Proxy(registers[reg]);
 
@@ -40,6 +38,26 @@ CPU::Register_Proxy CPU::operator[](Register reg)
     if (reg >= AL && reg <= DL)
         return Register_Proxy(registers[reg % 8], 0xFF);
 
-    std::cerr << "FUCK YOU\n";
+    std::cerr << "FUCK YOU " << reg << " is not a register!!" << '\n';
     std::exit(69);
+}
+
+void CPU::Register_Proxy::operator+=(uint64_t value)
+{
+    reg_data = reg_data + static_cast<uint64_t>(value);
+}
+
+void CPU::Register_Proxy::operator-=(uint64_t value)
+{
+    reg_data = reg_data - static_cast<uint64_t>(value);
+}
+
+void CPU::Register_Proxy::operator*=(uint64_t value)
+{
+    reg_data = reg_data * static_cast<uint64_t>(value);
+}
+
+void CPU::Register_Proxy::operator/=(uint64_t value)
+{
+    reg_data = reg_data / static_cast<uint64_t>(value);
 }
