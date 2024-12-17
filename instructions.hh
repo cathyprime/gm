@@ -2,16 +2,15 @@
 
 #include "registers.hh"
 
-enum Instruction_Code : std::uint64_t {
-    HLT = 1, MOV, ADD,
+enum Instruction_Code : std::uint16_t {
+    MOV = 1, ADD,
     SUB, MUL, DIV,
     PSH, POP, AND,
     OR, XOR, NOT,
     INT, JEQ, JNE,
     JMP, JGT, JLT,
+    HLT = 0xF4,
 };
-
-uint64_t operator+(CPU &cpu, Register_Value &rv);
 
 struct Instruction {
     Instruction_Code instruction_code;
@@ -20,3 +19,4 @@ struct Instruction {
 };
 
 void exec(CPU &cpu, Instruction instruction);
+void dispatch_interrupt(CPU &cpu, int interrupt);

@@ -1,0 +1,27 @@
+magic number: acab acab
+major version: 0001 -> 0
+minor version: 0000 -> 0
+data section address: 0000 0000 0000 0018 -> 24
+start section address: 0000 0000 0000 0028 -> 40
+data section: [
+    {
+        len = 000e -> 14
+        items: [
+            48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 0a
+        ] -> Hello, World!\n
+    }
+]
+code section: [
+    0001 -> mov
+    0109 -> EBX
+    02 0000 0000 0000 0001 -> 1
+    0001 -> mov
+    010a -> ECX
+    00 0000 0000 0000 0018 -> 0x18 -> Hello, World!\n
+    0001 -> mov
+    010f -> EDX
+    02 0000 0000 0000 000e -> 14
+    000c -> int
+    02 0000 0000 0000 0001 -> 1
+    F4 -> halt
+]

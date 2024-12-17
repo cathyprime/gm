@@ -6,6 +6,7 @@ void exec(CPU &cpu, Instruction inst)
 {
     switch (inst.instruction_code) {
         case HLT:
+            std::cout << "reached hlt, exiting :3" << std::endl;
             std::exit(0);
             break;
         case MOV:
@@ -23,13 +24,21 @@ void exec(CPU &cpu, Instruction inst)
         case DIV:
             cpu[inst.first.as_register] /= cpu[inst.second];
             break;
+        case AND:
+            cpu[inst.first.as_register] = cpu[inst.first.as_register] & cpu[inst.second];
+            break;
+        case OR:
+            cpu[inst.first.as_register] = cpu[inst.first.as_register] | cpu[inst.second];
+            break;
+        case XOR:
+            cpu[inst.first.as_register] = cpu[inst.first.as_register] ^ cpu[inst.second];
+            break;
+        case NOT:
+            cpu[inst.first.as_register] = ~cpu[inst.first];
+            break;
+        case INT:
         case PSH:
         case POP:
-        case AND:
-        case OR:
-        case XOR:
-        case NOT:
-        case INT:
         case JEQ:
         case JNE:
         case JMP:
@@ -41,4 +50,8 @@ void exec(CPU &cpu, Instruction inst)
             std::exit(1);
     }
     cpu[IP]++;
+}
+
+void dispatch_interrupt(CPU &cpu, int interrupt)
+{
 }
