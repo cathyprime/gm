@@ -1,38 +1,28 @@
+#include <queue>
 #include <vector>
 #include <string>
 #include <cstddef>
 #include <numeric>
 #include <fstream>
+#include <algorithm>
 #include <filesystem>
 #include <unordered_set>
 
-enum class Mode {
-    Debug,
-    Release,
-    Clean,
-};
-
 #include "maker.hh"
-
-#define build_dir "build/"
-#define out_dir "out/"
-#define compiler "g++"
-
-#define debug_dir "debug/"
-#define release_dir "release/"
-
-#define debug_exe "main"
-#define release_exe "gm"
 
 namespace fs = std::filesystem;
 using namespace std;
 
-Mode from_string(const string &str)
-{
-    if (str == "release") return Mode::Release;
-    if (str == "clean") return Mode::Clean;
-    return Mode::Debug;
-}
+maker::Maker mk;
+
+struct env {
+    fs::path build_artifacts;
+    fs::path output_dir;
+    string compile_flags;
+    string exe_name;
+    string compiler;
+    string mode;
+};
 
 vector<string> get_included_headers_from_file(fs::path filename)
 {
@@ -52,94 +42,100 @@ vector<string> get_included_headers_from_file(fs::path filename)
     return results;
 }
 
+void dir_rules(env &e)
+{
+    fs::path artifacts = e.build_artifacts / e.mode;
+    string out_dir = e.output_dir.string();
+    mk += maker::Rule(out_dir, { out_dir }).with_cmd(maker::from_string("mkdir -p " + out_dir)),
+          maker::Rule(artifacts, { artifacts }).with_cmd(maker::from_string("mkdir -p " + artifacts.string()));
+}
+
+fs::path gen_ofile_with_rule(env &e, const fs::directory_entry &entry, vector<string> deps)
+{
+    string o_file = (e.build_artifacts / e.mode / entry.path().filename().replace_extension("o")).string();
+    maker::Rule rule(o_file);
+    deps.push_back((e.build_artifacts / e.mode).string());
+
+    rule.deps = deps;
+    rule.cmd = maker::from_string(e.compiler + " -c -o " + o_file + " " + e.compile_flags + entry.path().string());
+    mk += rule;
+    return entry.path().filename().replace_extension("o");
+}
+
+void make_main(env &e, vector<fs::path> &deps)
+{
+    string o_files;
+    vector<string> deps_str;
+    deps_str.resize(deps.size());
+
+    transform(deps.begin(), deps.end(), deps_str.begin(), [&](auto &it) {
+        auto o = e.build_artifacts / e.mode / it;
+        o_files += ' ' + o.string();
+        return o;
+    });
+
+    deps_str.push_back(e.output_dir);
+
+    auto exe_name = (e.output_dir / e.exe_name).string();
+    mk += maker::Rule(exe_name, deps_str)
+        .with_cmd(maker::from_string(e.compiler + " -o " + exe_name + " " + o_files)),
+        maker::Rule(e.mode, { exe_name }).with_phony();
+}
+
 int main(int argc, char **argv)
 {
+    std::string compiler = "g++";
+
     GO_REBUILD_YOURSELF(compiler, argc, argv);
 
-    maker::Maker mk;
+    env debug_env;
+    debug_env.build_artifacts = "build/";
+    debug_env.output_dir = "out/";
+    debug_env.compile_flags = "-g -O0 -Wall -Wextra -Wpedantic ";
+    debug_env.exe_name = "main";
+    debug_env.compiler = compiler;
+    debug_env.mode = "debug";
 
-    string arg;
-    if (argc >= 1)
-         arg = shift(argc, argv);
+    env release_env {debug_env};
+    release_env.compile_flags = "-O3 -s -Wall -Wextra -fno-rtti -fno-exceptions ";
+    release_env.exe_name = "gm";
+    release_env.mode = "release";
 
-    Mode mode = from_string(arg);
+    dir_rules(debug_env);
+    dir_rules(release_env);
 
-    string debug_artifacts = build_dir debug_dir;
-    string debug_exe_name = out_dir debug_exe;
-
-    string release_artifacts = build_dir release_dir;
-    string release_exe_name = out_dir release_exe;
-
-    mk += maker::Rule(out_dir, { out_dir }).with_cmd(maker::from_string("mkdir -p " out_dir)),
-          maker::Rule(debug_artifacts, { debug_artifacts }).with_cmd(maker::from_string("mkdir -p " + debug_artifacts)),
-          maker::Rule(release_artifacts, { release_artifacts }).with_cmd(maker::from_string("mkdir -p " + release_artifacts));
-
-    vector<fs::directory_entry> source_files;
+    vector<fs::path> o_files;
 
     for (const auto &entry: fs::directory_iterator(".")) {
         if (!entry.is_regular_file()) continue;
         if (entry.path() == "./maker.cc") continue;
         if (entry.path().extension() != ".cc") continue;
 
-        source_files.push_back(entry);
+        vector<string> deps = get_included_headers_from_file(entry.path());
+        (void)gen_ofile_with_rule(debug_env, entry, deps);
+        o_files.push_back(gen_ofile_with_rule(release_env, entry, deps));
     }
 
-    vector<string> debug_main_deps;
-    vector<string> release_main_deps;
+    make_main(debug_env, o_files);
+    make_main(release_env, o_files);
 
-    auto on_source = [&](const auto &entry, const string &artifacts, vector<string> &main_deps) {
-        string o_file = artifacts + entry.path().filename().replace_extension(".o").string();
-        main_deps.push_back(o_file);
-        maker::Rule rule(o_file);
+    queue<string> args;
+    while (argc >= 1)
+        args.push(shift(argc, argv));
 
-        auto deps = get_included_headers_from_file(entry.path());
-        deps.push_back(artifacts);
-        deps.push_back(entry.path().string());
-        rule.deps = move(deps);
-        rule.cmd = maker::from_string(string(compiler) + " -c -o " + o_file + " " + entry.path().string());
-        mk += rule;
-    };
-
-    for (const auto &entry: source_files) {
-        on_source(entry, debug_artifacts, debug_main_deps);
-        on_source(entry, release_artifacts, release_main_deps);
-    }
-
-    string debug_o_files_str = std::accumulate(
-        debug_main_deps.begin() + 1, debug_main_deps.end(), debug_main_deps[0],
-        [](const string &lhs, const string &rhs) {
-            return lhs + " " + rhs;
-        }
-    );
-
-    string release_o_files_str = std::accumulate(
-        release_main_deps.begin() + 1, release_main_deps.end(), release_main_deps[0],
-        [](const string &lhs, const string &rhs) {
-            return lhs + " " + rhs;
-        }
-    );
-
-    debug_main_deps.push_back(out_dir);
-    release_main_deps.push_back(out_dir);
-
-    mk += maker::Rule(debug_exe_name, debug_main_deps)
-        .with_cmd(maker::from_string(string(compiler) + " -o " + debug_exe_name + " " + debug_o_files_str)),
-        maker::Rule("debug", { debug_exe_name }).with_phony();
-
-    mk += maker::Rule(release_exe_name, release_main_deps)
-        .with_cmd(maker::from_string(string(compiler) + " -o " + release_exe_name + " " + release_o_files_str)),
-        maker::Rule("release", { release_exe_name }).with_phony();
-
-    switch (mode) {
-    case Mode::Debug:
+    if (args.empty()) {
         mk("debug");
-        break;
-    case Mode::Release:
-        mk("release");
-        break;
-    case Mode::Clean:
-        mk("clean");
-        break;
+    } else {
+        while (!args.empty()) {
+            string arg = args.front();
+            if (arg == "release") {
+                mk("release");
+            } else if (arg == "clean") {
+                mk("clean");
+            } else {
+                mk("debug");
+            }
+            args.pop();
+        }
     }
-
 }
