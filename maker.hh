@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <functional>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -19,7 +20,7 @@
 #define WRN(mess) std::cerr << "[WARN]: " << mess << '\n'
 #define ERR(mess) std::cerr << "[ERROR]: " << mess << '\n'
 #define CMD(mess) std::cerr << "[CMD]: " << mess << '\n'
-#define shift(argc, argv) (argc--, *argv++)
+#define shift(argc, argv) ((argc)--, *(argv)++)
 
 namespace maker {
 
@@ -348,42 +349,66 @@ struct Maker {
 
 }
 
-#define __MAKER_BUILD(compiler, argc, argv, execpath, filename)       \
-std::string cmd;                                                      \
-cmd += std::string(compiler) + " -o ";                                \
-cmd += "'" + execpath.string() + "' ";                                \
-cmd += filename + ' ';                                                \
-cmd += std::string(MAKER_FLAGS) + ' ';                                \
-cmd += "-D_MAKER_OPTIMIZED";                                          \
-int result = std::system(cmd.c_str());                                \
-if(result == 0) {                                                     \
-    INF("compiled successfully! Restarting...");                      \
-    execv(execpath.string().c_str(), --argv);                         \
-} else {                                                              \
-    ERR("Compilation failed, fix errors and try again!");             \
-    return result;                                                    \
+namespace maker { namespace __internal {
+
+inline void go_rebuild_yourself(int *argc, char ***argv,
+                                const std::string &compiler,
+                                const std::filesystem::path &execpath,
+                                const std::string &filename)
+{
+    if (execpath.extension() == ".old") {
+        return;
+    }
+#ifndef _MAKER_OPTIMIZED
+    INF("First run detected, optimizing...");
+#else
+        auto exec_time = std::filesystem::last_write_time(execpath);
+        auto file_time = std::filesystem::last_write_time(filename);
+        if (file_time > exec_time) {
+            INF("New recipe detected, rebuilding...");
+        auto oldexec = std::filesystem::path(execpath).replace_extension("old");
+        std::error_code ecode;
+        if (std::filesystem::exists(oldexec)) {
+            std::filesystem::remove(oldexec, ecode);
+            if (ecode) {
+                ERR("Could not remove the old version: " << ecode.message());
+                std::exit(ecode.value());
+            }
+        }
+        INF("Renaming " << execpath.string() << " -> " << oldexec.string());
+        std::filesystem::rename(execpath, oldexec, ecode);
+        if (ecode) {
+            ERR("Could not rename file: " << ecode.message());
+            std::exit(ecode.value());
+        }
+#endif
+        std::string cmd;
+        cmd += compiler + " -o ";
+        cmd += "'" + execpath.string() + "' ";
+        cmd += filename + ' ';
+        cmd += std::string(MAKER_FLAGS) + ' ';
+        cmd += "-D_MAKER_OPTIMIZED";
+        int result = std::system(cmd.c_str());
+        if (result == 0) {
+            INF("Compiled successfully!");
+            std::string cmd = execpath.string();
+            while (*argc > 0)
+                cmd += ' ' + shift(*argc, *argv);
+            std::exit(std::system(cmd.c_str()));
+        } else {
+            ERR("Compilation failed, fix errors and try again!");
+            std::exit(result);
+        }
+#ifdef _MAKER_OPTIMIZED
+    }
+#endif
 }
 
-#ifdef _MAKER_OPTIMIZED
-#include <unistd.h>
-#define GO_REBUILD_YOURSELF(compiler, argc, argv)                     \
-    do {                                                              \
-        std::string filename = __FILE__;                              \
-        std::filesystem::path execpath = shift(argc, argv);           \
-        auto exec_time = std::filesystem::last_write_time(execpath);  \
-        auto file_time = std::filesystem::last_write_time(filename);  \
-        if (file_time > exec_time) {                                  \
-            INF("New recipe detected, rebuilding...");                \
-            __MAKER_BUILD(compiler, argc, argv, execpath, filename)   \
-        }                                                             \
+}} // namespace maker::__internal
+
+#define GO_REBUILD_YOURSELF(compiler, argc, argv)                                           \
+    do {                                                                                    \
+        std::string filename = __FILE__;                                                    \
+        std::filesystem::path execpath = shift(argc, argv);                                 \
+        maker::__internal::go_rebuild_yourself(&argc, &argv, compiler, execpath, filename); \
     } while(0);
-#else
-#include <unistd.h>
-#define GO_REBUILD_YOURSELF(compiler, argc, argv)                     \
-    do {                                                              \
-        std::string filename = __FILE__;                              \
-        std::filesystem::path execpath = shift(argc, argv);           \
-        INF("First run detected, optimizing...");                     \
-        __MAKER_BUILD(compiler, argc, argv, execpath, filename)       \
-    } while(0);
-#endif
