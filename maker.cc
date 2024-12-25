@@ -91,7 +91,7 @@ int main(int argc, char **argv)
     env debug_env;
     debug_env.build_artifacts = "build/";
     debug_env.output_dir = "out/";
-    debug_env.compile_flags = "-g -O0 -Wall -Wextra -Wpedantic ";
+    debug_env.compile_flags = "-g -O0 -Werror -Wall -Wextra -Wpedantic ";
     debug_env.exe_name = "main";
     debug_env.compiler = compiler;
     debug_env.mode = "debug";

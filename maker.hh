@@ -194,7 +194,7 @@ struct Job {
         return !todo.empty();
     }
 
-    bool operator()(size_t &idx, size_t total)
+    bool operator()(size_t &idx, size_t total, int &ecode)
     {
         std::vector<std::future<int>> futures;
 
@@ -209,7 +209,9 @@ struct Job {
         }
 
         for (auto &it: futures) {
-            if (it.get() != 0) {
+            int result = it.get();
+            if (result != 0) {
+                ecode = result;
                 return false;
             }
         }
@@ -221,7 +223,6 @@ struct Job {
 }
 
 struct Maker {
-  // private:
     std::unordered_map<std::string, Rule> rules;
 
     void build_tree(Tree &tree, size_t node_idx)
@@ -340,9 +341,15 @@ struct Maker {
             return;
         }
 
+        int stage = 0;
         size_t count = 0;
+        int ecode;
         for (auto &it: jobs) {
-            it(count, total);
+            stage++;
+            if(!it(count, total, ecode)) {
+                ERR("Compilation failed at stage: " << stage << " Aborting!");
+                std::exit(ecode);
+            }
         }
     }
 };
