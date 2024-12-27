@@ -37,7 +37,7 @@ CPU::Register_Proxy CPU::operator[](Register reg)
     if (reg >= AX && reg <= DX)
         return Register_Proxy(registers[reg % 8], 0xFFFF);
 
-    if (reg >= AH && reg <= CH || reg == DH)
+    if ((reg >= AH && reg <= CH) || reg == DH)
         return Register_Proxy(registers[reg % 8], 0xFF, 8);
 
     if (reg >= AL && reg <= DL)

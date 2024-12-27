@@ -84,20 +84,21 @@ void make_main(env &e, vector<fs::path> &deps)
 
 int main(int argc, char **argv)
 {
-    std::string compiler = "g++";
+    const std::string std_version = "-std=c++23 ";
+    const std::string compiler = "g++";
 
     GO_REBUILD_YOURSELF(compiler, argc, argv);
 
     env debug_env;
     debug_env.build_artifacts = "build/";
     debug_env.output_dir = "out/";
-    debug_env.compile_flags = "-g -O0 -Werror -Wall -Wextra -Wpedantic ";
+    debug_env.compile_flags = std_version + "-g -O0 -Werror -Wall -Wextra -Wpedantic ";
     debug_env.exe_name = "main";
     debug_env.compiler = compiler;
     debug_env.mode = "debug";
 
     env release_env {debug_env};
-    release_env.compile_flags = "-O3 -s -Wall -Wextra -fno-rtti -fno-exceptions ";
+    release_env.compile_flags = std_version + "-O3 -s -Wall -Wextra -fno-rtti -fno-exceptions ";
     release_env.exe_name = "gm";
     release_env.mode = "release";
 

@@ -52,6 +52,6 @@ void exec(CPU &cpu, Instruction inst)
     cpu[IP]++;
 }
 
-void dispatch_interrupt(CPU &cpu, int interrupt)
-{
-}
+// void dispatch_interrupt(CPU &cpu, int interrupt)
+// {
+// }
