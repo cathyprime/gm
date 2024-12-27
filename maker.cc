@@ -24,24 +24,6 @@ struct env {
     string mode;
 };
 
-vector<string> get_included_headers_from_file(fs::path filename)
-{
-    vector<string> results;
-    ifstream file(filename);
-
-    string line;
-    while (getline(file, line)) {
-        if (line.rfind("#include \"", 0) == 0) {
-            size_t start = line.find('"') + 1;
-            size_t end = line.find('"', start);
-            if (start != string::npos && end != string::npos) {
-                results.push_back(line.substr(start, end - start));
-            }
-        }
-    }
-    return results;
-}
-
 void dir_rules(env &e)
 {
     fs::path artifacts = e.build_artifacts / e.mode;
@@ -78,16 +60,16 @@ void make_main(env &e, vector<fs::path> &deps)
 
     auto exe_name = (e.output_dir / e.exe_name).string();
     mk += maker::Rule(exe_name, deps_str)
-        .with_cmd(maker::from_string(e.compiler + " -o " + exe_name + " " + o_files)),
+        .with_cmd(maker::from_string(e.compiler + e.compile_flags + " -o " + exe_name + " " + o_files)),
         maker::Rule(e.mode, { exe_name }).with_phony();
 }
 
 int main(int argc, char **argv)
 {
     const std::string std_version = "-std=c++23 ";
-    const std::string compiler = "g++";
+    const std::string compiler = maker::utils::get_compiler() + ' ';
 
-    GO_REBUILD_YOURSELF(compiler, argc, argv);
+    GO_REBUILD_YOURSELF(argc, argv);
 
     env debug_env;
     debug_env.build_artifacts = "build/";
@@ -112,7 +94,7 @@ int main(int argc, char **argv)
         if (entry.path() == "./maker.cc") continue;
         if (entry.path().extension() != ".cc") continue;
 
-        vector<string> deps = get_included_headers_from_file(entry.path());
+        vector<string> deps = maker::utils::get_includes_from_file(entry.path());
         (void)gen_ofile_with_rule(debug_env, entry, deps);
         o_files.push_back(gen_ofile_with_rule(release_env, entry, deps));
     }
