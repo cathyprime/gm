@@ -13,7 +13,7 @@
 #include <unordered_set>
 
 #ifndef MAKER_FLAGS
-#define MAKER_FLAGS "-Wfatal-errors -Oz -fno-rtti -fno-exceptions -Wall -Wextra -march=native -s -Werror -Wpedantic"
+#define MAKER_FLAGS "-std=c++17 -Wfatal-errors -Oz -fno-rtti -fno-exceptions -Wall -Wextra -march=native -s -Werror -Wpedantic"
 #endif
 
 #define INF(mess) std::cerr << "[INFO]: " << mess << '\n'
@@ -41,7 +41,7 @@ template<typename T>
 using isCmd = isU<T, Cmd>;
 
 template<typename S, typename = isString<S>>
-constexpr Cmd from_string(S &&str)
+Cmd from_string(S &&str)
 {
     Cmd cmd;
     cmd.func = [=]() {
@@ -400,7 +400,7 @@ inline void go_rebuild_yourself(int *argc, char ***argv,
             INF("Compiled successfully!");
             std::string cmd = execpath.string();
             while (*argc > 0)
-                cmd += ' ' + shift(*argc, *argv);
+                cmd += ' ' + std::string(shift(*argc, *argv));
             std::exit(std::system(cmd.c_str()));
         } else {
             ERR("Compilation failed, fix errors and try again!");
