@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <future>
+#include <utility>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <functional>
+#include <type_traits>
 #include <system_error>
 #include <unordered_map>
 #include <unordered_set>
@@ -25,41 +27,137 @@
 
 namespace maker {
 
+struct Rule;
+
 using cmd_t = std::function<int(void)>;
+using deps_t = std::function<std::vector<std::string>(void)>;
+
+template<typename T, typename U>
+constexpr bool isU = std::is_same<std::decay_t<T>, U>::value;
+
+template<typename T>
+constexpr bool isString = isU<T, std::string>;
+
+template<typename T>
+constexpr bool isRule = isU<T, maker::Rule>;
+
+template <typename T, typename... Args>
+using areAllOfType = std::enable_if_t<(std::is_same<std::decay_t<Args>, T>::value && ...)>;
+
+template <typename... Args>
+using areAllStrings = areAllOfType<std::string, Args...>;
+
+template <typename Container>
+constexpr bool isContainer = std::is_same_v<std::decay_t<Container>, std::vector<std::string>>;
+
+template <typename IL>
+constexpr bool isInitializerList = std::is_same_v<std::decay_t<IL>, std::initializer_list<std::string>>;
 
 struct Cmd {
     cmd_t func;
     std::string description;
+
+    Cmd()
+        : func()
+        , description()
+    {}
+
+    template<typename S, std::enable_if_t<isString<S>, int> = 0>
+    Cmd(S &&s)
+        : func([str = std::forward<S>(s)]() { return std::system(str.c_str()); })
+        , description(s)
+    {}
 };
 
-template<typename T, typename U>
-using isU = std::enable_if<std::is_same<std::decay_t<T>, U>::value>;
-
 template<typename T>
-using isString = isU<T, std::string>;
+constexpr bool isCmd = isU<T, Cmd>;
 
-template<typename T>
-using isCmd = isU<T, Cmd>;
+struct Deps {
+    deps_t func;
 
-template<typename S, typename = isString<S>>
-Cmd from_string(S &&str)
-{
-    Cmd cmd;
-    cmd.func = [=]() {
-        return std::system(str.c_str());
-    };
-    cmd.description = std::forward<S>(str);
-    return cmd;
-}
+    Deps()
+        : func()
+    {}
 
-Cmd from_string(const char *str)
-{
-    return from_string(std::string(str));
-}
+    template<typename Container, std::enable_if_t<isContainer<Container> || isInitializerList<Container>, int> = 0>
+    Deps(Container &&v)
+        : func([v = std::forward<Container>(v)]() mutable -> std::vector<std::string> {
+            return std::forward<Container>(v);
+        })
+    {}
+
+    template<typename IL, std::enable_if_t<isInitializerList<IL>, int> = 0>
+    Deps& operator=(IL il)
+    {
+        func = [=]() -> std::vector<std::string> { return std::vector<std::string>(il); };
+        return *this;
+    }
+
+    Deps& operator=(std::vector<std::string> il)
+    {
+        func = [=]() -> std::vector<std::string> { return {il}; };
+        return *this;
+    }
+
+    std::vector<std::string> operator()() {
+        return func();
+    }
+};
+
+class Cmd_Builder {
+    std::vector<std::string> m_cmd;
+    std::size_t m_idx;
+
+  public:
+    Cmd_Builder() = default;
+
+    template <typename... Args, typename = areAllStrings<Args...>>
+    Cmd_Builder(Args... args) noexcept
+        : m_cmd({ args... })
+        , m_idx(0)
+    {}
+    template<typename... Args, typename = areAllStrings<Args...>>
+    Cmd_Builder &push(Args... args) noexcept
+    {
+        m_cmd.insert(m_cmd.end(), { args... });
+        return *this;
+    }
+    template<typename S, std::enable_if_t<isString<S>, int> = 0>
+    Cmd_Builder &push(S &&s) noexcept
+    {
+        m_cmd.push_back(std::forward<S>(s));
+        return *this;
+    }
+    template<typename S, std::enable_if_t<isString<S>, int> = 0>
+    Cmd_Builder &operator+=(S &&s)
+    {
+        m_cmd.push_back(std::forward<S>(s));
+        return *this;
+    }
+    template<typename S, std::enable_if_t<isString<S>, int> = 0>
+    Cmd_Builder &operator+(S &&s)
+    {
+        m_cmd.push_back(std::forward<S>(s));
+        return *this;
+    }
+    operator std::string()
+    {
+        return build();
+    }
+    [[nodiscard]] std::string build() const noexcept
+    {
+        std::string result = m_cmd[0];
+
+        for (auto it = m_cmd.begin() + 1; it != m_cmd.end(); ++it) {
+            result += ' ' + *it;
+        }
+        return result;
+    }
+};
 
 struct Rule {
     std::optional<Cmd> cmd;
-    std::vector<std::string> deps;
+    Deps deps;
     std::string target;
     bool phony;
 
@@ -69,7 +167,7 @@ struct Rule {
         , target()
         , phony(false)
     {}
-    template<typename S, typename = isString<S>>
+    template<typename S, std::enable_if_t<isString<S>, int> = 0>
     Rule(S &&t)
         : cmd()
         , deps()
@@ -77,7 +175,23 @@ struct Rule {
         , phony(false)
     {}
 
-    template<typename F, typename = isCmd<F>>
+    template<typename S, std::enable_if_t<isString<S>, int> = 0>
+    Rule(S &&t, std::initializer_list<std::string> vec)
+        : cmd()
+        , deps(vec)
+        , target(std::forward<S>(t))
+        , phony(false)
+    {}
+
+    template<typename S, typename Container, std::enable_if_t<isString<S> || isContainer<Container>, int> = 0>
+    Rule(S &&t, Container &&deps)
+        : cmd()
+        , deps(std::forward<Container>(deps))
+        , target(std::forward<S>(t))
+        , phony(false)
+    {}
+
+    template<typename F, std::enable_if_t<isCmd<F>, int> = 0>
     Rule &with_cmd(F &&c)
     {
         cmd = std::make_optional(std::forward<F>(c));
@@ -98,7 +212,7 @@ struct Rule {
             return false;
 
         auto target_mod_time = std::filesystem::last_write_time(target);
-        for (const auto &dep: deps) {
+        for (const auto &dep: deps()) {
             if (!std::filesystem::exists(dep))
                 return true;
 
@@ -111,22 +225,6 @@ struct Rule {
         }
         return false;
     }
-
-    template<typename T, typename = isString<T>>
-    Rule(T &&t, std::vector<std::string>&& v)
-        : cmd()
-        , deps(std::move(v))
-        , target(std::forward<T>(t))
-        , phony(false)
-    {}
-
-    template<typename T, typename = isString<T>>
-    Rule(T &&t, std::vector<std::string> &vec)
-        : cmd()
-        , deps(vec)
-        , target(std::forward<T>(t))
-        , phony(false)
-    {}
 };
 
 namespace {
@@ -183,7 +281,7 @@ struct Job {
         return todo.size();
     }
 
-    template<typename F, typename = isCmd<F>>
+    template<typename F, std::enable_if_t<isCmd<F>, int> = 0>
     Job &operator+=(F &&cmd)
     {
         todo.push_back(std::forward<F>(cmd));
@@ -232,7 +330,7 @@ struct Maker {
         if (tree.nodes[node_idx].visited) return;
         node->visited = true;
 
-        for (const auto &dep: node->rule->deps) {
+        for (const auto &dep: node->rule->deps()) {
             if (rules.find(dep) == rules.end()) continue;
 
             Rule* rule = &rules[dep];
@@ -296,14 +394,14 @@ struct Maker {
         : rules()
     {}
 
-    template<typename R, typename = isU<R, Rule>>
+    template<typename R, std::enable_if_t<isU<R, Rule>, int> = 0>
     Maker &operator+=(R &&rule)
     {
         rules[rule.target] = std::forward<R>(rule);
         return *this;
     }
 
-    template<typename R, typename = isU<R, Rule>>
+    template<typename R, std::enable_if_t<isRule<R>, int> = 0>
     Maker &operator,(R &&rule)
     {
         rules[rule.target] = std::forward<R>(rule);
@@ -357,13 +455,29 @@ struct Maker {
 
 namespace utils {
 
+template<typename S, std::enable_if_t<isString<S>, int> = 0>
+inline Cmd from_string(S &&str)
+{
+    Cmd cmd;
+    cmd.func = [=]() {
+        return std::system((static_cast<std::string>(str)).c_str());
+    };
+    cmd.description = std::forward<S>(str);
+    return cmd;
+}
+
+inline Cmd from_string(const char *str)
+{
+    return from_string(std::string(str));
+}
+
 inline std::vector<std::string> get_includes_from_file(std::filesystem::path filename)
 {
     std::vector<std::string> results;
     std::ifstream file(filename);
 
     std::string line;
-    while (getline(file, line)) {
+    while (std::getline(file, line)) {
         if (line.rfind("#include \"", 0) == 0) {
             std::size_t start = line.find('"') + 1;
             std::size_t end = line.find('"', start);
@@ -381,9 +495,9 @@ std::string get_compiler()
     return compiler == nullptr ? "c++" : compiler;
 }
 
-}
+} // namespace: utils
 
-} // maker
+} // namespace: maker
 
 namespace maker { namespace __internal {
 
