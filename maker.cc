@@ -113,7 +113,7 @@ int main(int argc, char **argv)
 
     std::array rules{ &debug_env, &release_env };
 
-    mk += maker::Rule("out/"s, { "out/" }).with_cmd(maker::Cmd("mkdir -p out/"s));
+    mk += maker::Rule("out/"s, { "out/" }).with_cmd("mkdir -p out/"s);
 
     for_each(rules.begin(), rules.end(), [](env *e) {
         gen_dir_rules(*e);

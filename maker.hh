@@ -60,13 +60,15 @@ struct Cmd {
     Cmd()
         : func()
         , description()
-    {}
+    {
+    }
 
     template<typename S, std::enable_if_t<isString<S>, int> = 0>
     Cmd(S &&s)
         : func([str = std::forward<S>(s)]() { return std::system(str.c_str()); })
         , description(s)
-    {}
+    {
+    }
 };
 
 template<typename T>
@@ -77,30 +79,35 @@ struct Deps {
 
     Deps()
         : func()
-    {}
+    {
+    }
 
-    Deps(std::vector<std::string> &vec)
+    Deps(const std::vector<std::string> &vec)
         : func([=]() mutable -> std::vector<std::string> {
             return vec;
         })
-    {}
+    {
+    }
 
     Deps(std::vector<std::string> &&vec)
         : func([vec = std::move(vec)]() mutable -> std::vector<std::string> {
             return vec;
         })
-    {}
+    {
+    }
 
     template<typename IL, std::enable_if_t<isInitializerList<IL>, int> = 0>
     Deps& operator=(IL il)
     {
-        func = [=]() -> std::vector<std::string> { return std::vector<std::string>(il); };
+        func = [=]() -> std::vector<std::string> { return std::vector<std::string>( std::forward<IL>(il)); };
         return *this;
     }
 
-    Deps& operator=(std::vector<std::string> il)
+    Deps& operator=(std::vector<std::string> &&il)
     {
-        func = [=]() -> std::vector<std::string> { return {il}; };
+        func = [vec = std::vector<std::string>{std::move(il)}]() -> std::vector<std::string> {
+            return vec;
+        };
         return *this;
     }
 
@@ -120,7 +127,8 @@ class Cmd_Builder {
     Cmd_Builder(Args... args) noexcept
         : m_cmd({ args... })
         , m_idx(0)
-    {}
+    {
+    }
     template<typename... Args, typename = areAllStrings<Args...>>
     Cmd_Builder &push(Args... args) noexcept
     {
@@ -171,30 +179,34 @@ struct Rule {
         , deps()
         , target()
         , phony(false)
-    {}
+    {
+    }
     template<typename S, std::enable_if_t<isString<S>, int> = 0>
     Rule(S &&t)
         : cmd()
         , deps()
         , target(std::forward<S>(t))
         , phony(false)
-    {}
+    {
+    }
 
     template<typename S, std::enable_if_t<isString<S>, int> = 0>
-    Rule(S &&t, std::initializer_list<std::string> vec)
+    Rule(S &&t, std::initializer_list<std::string> &&vec)
         : cmd()
-        , deps(vec)
+        , deps(std::move(vec))
         , target(std::forward<S>(t))
         , phony(false)
-    {}
+    {
+    }
 
     template<typename S, typename Container, std::enable_if_t<isString<S> || isContainer<Container>, int> = 0>
     Rule(S &&t, Container &&deps)
         : cmd()
-        , deps(std::forward<Container>(deps))
+        , deps(std::move(deps))
         , target(std::forward<S>(t))
         , phony(false)
-    {}
+    {
+    }
 
     template<typename F, std::enable_if_t<isCmd<F>, int> = 0>
     Rule &with_cmd(F &&c)
@@ -211,7 +223,7 @@ struct Rule {
             return std::system((static_cast<std::string>(s)).c_str());
         };
         cmd.description = std::forward<S>(s);
-        this->cmd = cmd;
+        this->cmd = std::move(cmd);
         return *this;
     }
 
@@ -255,13 +267,15 @@ struct Tree_Node {
         : rule(nullptr)
         , deps()
         , visited(false)
-    {}
+    {
+    }
 
     Tree_Node(Rule* rule)
         : rule(rule)
         , deps()
         , visited(false)
-    {}
+    {
+    }
 };
 
 struct Tree {
@@ -409,7 +423,8 @@ struct Maker {
   public:
     Maker()
         : rules()
-    {}
+    {
+    }
 
     template<typename R, std::enable_if_t<isU<R, Rule>, int> = 0>
     Maker &operator+=(R &&rule)
