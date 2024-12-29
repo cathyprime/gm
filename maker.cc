@@ -37,7 +37,7 @@ void gen_dir_rules(env &e)
 {
     maker::Rule rule(e.build_artifacts.string());
     rule.deps = { e.build_artifacts.string() };
-    rule.cmd = "mkdir -p " + e.build_artifacts.string();
+    rule.with_cmd("mkdir -p " + e.build_artifacts.string());
     mk += rule;
 }
 
@@ -48,8 +48,7 @@ fs::path gen_ofile_and_rule(env &e, const fs::directory_entry &entry, vector<str
     deps.push_back((e.build_artifacts).string());
 
     rule.deps = { deps };
-    rule.cmd = std::string(maker::Cmd_Builder(e.compiler) + "-c -o"s + o_file + e.compile_flags + entry.path().string())
-    ;
+    rule.with_cmd(std::string(maker::Cmd_Builder(e.compiler) + "-c -o"s + o_file + e.compile_flags + entry.path().string()));
     mk += rule;
     return entry.path().filename().replace_extension("o");
 }
@@ -68,11 +67,14 @@ void make_main(env &e, vector<fs::path> &deps)
 
     deps_str.push_back("out/");
 
-    auto exe_name = (e.exe_name).string();
-    maker::Rule rule(std::move(exe_name), std::move(deps_str));
-    mk += rule
-        .with_cmd(maker::Cmd{std::string(maker::Cmd_Builder(e.compiler) + e.compile_flags + "-o"s + exe_name + o_files)}),
-        maker::Rule(e.mode, std::vector{ exe_name }).with_phony();
+    auto exe_name = e.exe_name.string();
+    maker::Rule rule {exe_name, deps_str};
+
+    rule.with_cmd(std::string(maker::Cmd_Builder(e.compiler) + e.compile_flags + "-o"s + exe_name + o_files));
+
+    mk += rule;
+    auto mode_rule = maker::Rule(e.mode, { e.exe_name.string() }).with_phony();
+    mk += mode_rule;
 }
 
 maker::Rule create_dependency_rule(const fs::path &file, const fs::path &out_dir, const std::string &compile_flags)
@@ -87,18 +89,9 @@ maker::Rule create_dependency_rule(const fs::path &file, const fs::path &out_dir
 
     fs::path output = out_dir / d_file;
     maker::Rule rule = maker::Rule(output.string());
-    rule.cmd = std::string(maker::Cmd_Builder(maker::utils::get_compiler()) + "-MMD -MF"s + output.string() + compile_flags + file.string());
+    rule.with_cmd(std::string(maker::Cmd_Builder(maker::utils::get_compiler()) + "-MMD -MF"s + output.string() + compile_flags + file.string()));
     rule.deps = { file };
     return rule;
-}
-
-std::vector<std::string> get_dependencies_from_d(const fs::path &file)
-{
-    namespace fs = std::filesystem;
-    assert(fs::exists(file));
-
-    std::vector<std::string> results;
-    std::fstream d_file(file);
 }
 
 int main(int argc, char **argv)

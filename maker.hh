@@ -79,10 +79,15 @@ struct Deps {
         : func()
     {}
 
-    template<typename Container, std::enable_if_t<isContainer<Container> || isInitializerList<Container>, int> = 0>
-    Deps(Container &&v)
-        : func([v = std::forward<Container>(v)]() mutable -> std::vector<std::string> {
-            return std::forward<Container>(v);
+    Deps(std::vector<std::string> &vec)
+        : func([=]() mutable -> std::vector<std::string> {
+            return vec;
+        })
+    {}
+
+    Deps(std::vector<std::string> &&vec)
+        : func([vec = std::move(vec)]() mutable -> std::vector<std::string> {
+            return vec;
         })
     {}
 
@@ -195,6 +200,18 @@ struct Rule {
     Rule &with_cmd(F &&c)
     {
         cmd = std::make_optional(std::forward<F>(c));
+        return *this;
+    }
+
+    template<typename S, std::enable_if_t<isString<S>, int> = 0>
+    Rule &with_cmd(S &&s)
+    {
+        Cmd cmd;
+        cmd.func = [=]() {
+            return std::system((static_cast<std::string>(s)).c_str());
+        };
+        cmd.description = std::forward<S>(s);
+        this->cmd = cmd;
         return *this;
     }
 
@@ -454,6 +471,46 @@ struct Maker {
 };
 
 namespace utils {
+
+#define fs std::filesystem
+std::unordered_map<fs::path, std::vector<fs::path>>
+parse_d(fs::path d_file)
+{
+    std::fstream file(d_file);
+    std::unordered_map<fs::path, std::vector<fs::path>> dict;
+    std::string lex;
+
+    char cur_char;
+    char next_char;
+    std::string current_key;
+    while ((cur_char = file.get()) != EOF) {
+        if (std::isspace(cur_char)) {
+            if (!lex.empty() && lex[lex.size() - 1] == ':') {
+                current_key = {lex.data(), lex.size() - 1};
+                dict[current_key] = {};
+                lex.clear();
+                continue;
+            }
+            if (!lex.empty())
+                dict[current_key].push_back(lex);
+            lex.clear();
+            continue;
+        }
+        if (cur_char == '\\') {
+            if ((next_char = file.peek()) == ' ') {
+                lex += file.get();
+                while (isspace(file.peek()))
+                    (void)file.get();
+                continue;
+            } else {
+                continue;
+            }
+        }
+        lex += cur_char;
+    }
+    return dict;
+}
+#undef fs
 
 template<typename S, std::enable_if_t<isString<S>, int> = 0>
 inline Cmd from_string(S &&str)
